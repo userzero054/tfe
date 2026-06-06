@@ -45,6 +45,21 @@ def on_message(client, userdata, msg):
     topic = msg.topic
     print(f"📩 [MQTT {topic}] Message reçu : {payload}")
 
+    # --- Retour Active Directory (traité en priorité : son topic n'a que 2 segments) ---
+    if topic == TOPIC_CONFIRM_AD:
+        try:
+            data = payload.split("|")
+            status, username = data[0], data[1]
+            res = supabase.table("commandes_mqtt").select("id").eq("action", "CHECK_LDAP").eq("valeur_ad", username).eq("execute", True).order("id", desc=True).limit(1).execute()
+            if res.data:
+                cmd_id = res.data[0]['id']
+                db_status = "VALID" if status == "VALID" else "NOT_FOUND"
+                supabase.table("commandes_mqtt").update({"ad_status": db_status}).eq("id", cmd_id).execute()
+                print(f"✅ Statut AD mis à jour pour {username} : {db_status}")
+        except Exception as e:
+            print(f"⚠️ Erreur retour AD : {e}")
+        return
+
     # Extraction du nom de la porte depuis le topic (ex: "serrure/porte_1/retour" -> "porte_1")
     parts_topic = topic.split("/")
     if len(parts_topic) < 3:
@@ -166,20 +181,6 @@ def on_message(client, userdata, msg):
         except Exception as e:
             print(f"❌ Erreur CHECK_FINGER : {e}")
 
-    # 6. Retour Active Directory
-    elif topic == TOPIC_CONFIRM_AD:
-        try:
-            data = payload.split("|")
-            status, username = data[0], data[1]
-            res = supabase.table("commandes_mqtt").select("id").eq("action", "CHECK_LDAP").eq("valeur_ad", username).eq("execute", True).order("id", desc=True).limit(1).execute()
-            if res.data:
-                cmd_id = res.data[0]['id']
-                db_status = "VALID" if status == "OK" else "NOT_FOUND"
-                supabase.table("commandes_mqtt").update({"ad_status": db_status}).eq("id", cmd_id).execute()
-                print(f"✅ Statut AD mis à jour pour {username} : {db_status}")
-        except Exception as e:
-            print(f"⚠️ Erreur retour AD : {e}")
-
 # --- INITIALISATION MQTT ---
 client = mqtt.Client()
 client.username_pw_set(MQTT_USER, MQTT_PASS)
@@ -234,6 +235,21 @@ while True:
             elif cmd['action'] == "CHECK_LDAP":
                 client.publish(TOPIC_SYNC_AD, f"{cmd['valeur_ad']}")
                 print(f"📡 Ordre AD envoyé : {cmd['valeur_ad']}")
+                
+            elif cmd['action'] == "START_CHECK_FINGER":
+                try:
+                    res_user = supabase.table("utilisateurs").select("fingerprint_id").execute()
+                    slots_valides = []
+                    if res_user.data:
+                        for u in res_user.data:
+                            val = u.get('fingerprint_id')
+                            if val is not None and str(val).isdigit():
+                                slots_valides.append(str(int(val)))
+                    liste_slots = ",".join(slots_valides)
+                    client.publish("serrure/porte_1/commande", f"CHECK_FANTOME:{liste_slots}")
+                    print(f"🧹 Nettoyage fantômes lancé. Slots valides envoyés à porte_1 : [{liste_slots}]")
+                except Exception as err_fant:
+                    print(f"⚠️ Erreur préparation nettoyage fantômes : {err_fant}")
                 
             elif cmd['action'] == "START_DELETE":
                 valeur_recue = str(cmd.get('valeur_fingerprint', '')).strip()
