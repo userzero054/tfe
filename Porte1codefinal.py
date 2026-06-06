@@ -6,7 +6,7 @@ from fingerprint import Fingerprint
 import SH1106
 
 # --- CONFIG ---
-ssid, password = "Rayan", "Raralerare12"
+ssid, password = "Rayan1", "Raralerare12"
 mqtt_server = "91.134.134.58"
 client = MQTTClient("esp32_serrure", mqtt_server, user="esp32", password="181007")
 
@@ -25,6 +25,7 @@ derniere_sec = -1
 mode_actuel = "VEILLE" 
 target_finger_id = 1  
 timeout_mode = 0  
+dernier_scan = 0  # Anti-rebond : empêche d'ouvrir deux fois pour un même badge
 
 def ouvrir():
     relais.value(1)
@@ -88,6 +89,55 @@ def callback_mqtt(topic, msg):
                 client.publish(b"serrure/porte_1/retour", f"SLOT_DELETE_ERROR:{slot}".encode())
         except Exception as err:
             print("❌ Erreur pendant l'exécution du START_DELETE:", err)
+
+    # --- NOUVEAU : Nettoyage des empreintes fantômes ---
+    elif cmd.startswith("CHECK_FANTOME:"):
+        try:
+            # Récupère la liste des slots valides (présents en base) envoyée par le VPS
+            valides_str = cmd.split(":", 1)[1]
+            slots_valides = set()
+            for x in valides_str.split(","):
+                x = x.strip()
+                if x.isdigit():
+                    slots_valides.add(int(x))
+
+            print("🧹 Slots valides en base :", slots_valides)
+            oled.fill(0); oled.text("NETTOYAGE", 25, 10); oled.text("EMPREINTES...", 15, 35); oled.show()
+
+            # Lecture de la table d'index du capteur (slots physiquement occupés)
+            occupes = []
+            if hasattr(sensor, 'uart') and sensor.uart is not None:
+                sensor._send_packet(b'\x01', bytes([0x1f, 0x00]))
+                time.sleep(0.3)
+                raw = sensor.uart.read()
+                if raw and len(raw) >= 42 and raw[9] == 0x00:
+                    bitmap = raw[10:42]  # 32 octets = 256 slots possibles
+                    for i in range(256):
+                        if (bitmap[i // 8] >> (i % 8)) & 1:
+                            occupes.append(i)
+
+            print("📋 Slots occupés dans le capteur :", occupes)
+
+            # Supprime tout slot occupé qui n'existe pas dans la base
+            nb_supprimes = 0
+            for slot in occupes:
+                if slot not in slots_valides:
+                    slot_high = (slot >> 8) & 0xFF
+                    slot_low = slot & 0xFF
+                    paquet = bytes([0x0c, slot_high, slot_low, 0x00, 0x01])
+                    sensor._send_packet(b'\x01', paquet)
+                    if sensor._get_reply() == 0x00:
+                        print(f"🗑️ Empreinte fantôme slot {slot} supprimée.")
+                        nb_supprimes += 1
+                    else:
+                        print(f"⚠️ Echec suppression slot {slot}")
+                    time.sleep(0.1)
+
+            oled.fill(0); oled.text("NETTOYAGE FINI", 10, 20); oled.text(str(nb_supprimes) + " SUPPR", 30, 40); oled.show()
+            client.publish(b"serrure/porte_1/retour", f"FANTOME_CLEAN:{nb_supprimes}".encode())
+            time.sleep(2)
+        except Exception as err:
+            print("❌ Erreur nettoyage fantômes:", err)
 
 client.set_callback(callback_mqtt)
 
@@ -194,7 +244,7 @@ while True:
 
     elif mode_actuel == "VEILLE":
         (stat, tag) = rfid.request(rfid.CARD_REQIDL)
-        if stat == rfid.OK:
+        if stat == rfid.OK and (time.time() - dernier_scan) > 5:
             (stat, uid) = rfid.anticoll()
             if stat == rfid.OK:
                 nfc_val = "0x%02x%02x%02x%02x" % (uid[0], uid[1], uid[2], uid[3])
@@ -224,6 +274,8 @@ while True:
                 else:
                     print("📡 Empreinte non reconnue.")
                     oled.fill(0); oled.text("ERREUR DOIGT", 15, 30); oled.show(); time.sleep(1)
+                
+                dernier_scan = time.time()  # Réarme l'anti-rebond après le traitement
 
         t = time.localtime(time.time() + 7200)
         if t[5] != derniere_sec:
