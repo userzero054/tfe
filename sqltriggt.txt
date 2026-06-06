@@ -1,0 +1,52 @@
+ On nettoie proprement l'ancien trigger
+
+DROP TRIGGER IF EXISTS trigger_nouvel_utilisateur ON public.utilisateurs;
+
+
+
+-- 2. On recrée la fonction avec un bypass complet des droits RLS (SECURITY DEFINER + OWNER TO postgres)
+
+CREATE OR REPLACE FUNCTION public.creer_autorisations_par_defaut()
+
+RETURNS TRIGGER AS $$
+
+BEGIN
+
+  -- L'insertion se fait de manière brute, en contournant les droits restrictifs de FlutterFlow
+
+  INSERT INTO public.autorisation (id_user, id_porte, acces)
+
+  SELECT NEW.id, p.id, false
+
+  FROM public.portes p;
+
+  
+
+  RETURN NEW;
+
+END;
+
+$$ LANGUAGE plpgsql
+
+SECURITY DEFINER -- Exécute la fonction avec les droits du créateur (admin)
+
+SET search_path = public; -- Sécurité requise par Supabase pour le Security Definer
+
+
+
+-- 3. ÉTAPE CRUCIALE : On force l'application à considérer l'admin 'postgres' comme le propriétaire
+
+ALTER FUNCTION public.creer_autorisations_par_defaut() OWNER TO postgres;
+
+
+
+-- 4. On réinstalle le trigger proprement
+
+CREATE TRIGGER trigger_nouvel_utilisateur
+
+AFTER INSERT ON public.utilisateurs
+
+FOR EACH ROW
+
+EXECUTE FUNCTION public.creer_autorisations_par_defaut(); 
+
