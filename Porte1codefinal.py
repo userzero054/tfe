@@ -6,9 +6,7 @@ from fingerprint import Fingerprint
 import SH1106
 
 # --- CONFIG ---
-ssid, password = "Rayan1", "Raralerare12"
-mqtt_server = "91.134.134.58"
-client = MQTTClient("esp32_serrure", mqtt_server, user="esp32", password="181007")
+
 
 # --- MATERIEL ---
 relais = Pin(5, Pin.OUT, value=0)
