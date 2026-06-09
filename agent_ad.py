@@ -2,11 +2,7 @@ import paho.mqtt.client as mqtt
 import subprocess
  
 # --- CONFIGURATION ---
-MQTT_BROKER = "91.134.134.58"
-MQTT_USER = "esp32"
-MQTT_PASS = "181007"
-TOPIC_SYNC = "serrure/sync_ad"
-TOPIC_CONFIRM = "serrure/ad_confirm"
+
  
 def update_ad_user(username, client):
     print(f" Vérification AD pour : {username}")
