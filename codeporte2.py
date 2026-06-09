@@ -8,16 +8,9 @@ import urequests
 # ==========================================
 # CONFIGURATION WI-FI, MQTT & PRTG
 # ==========================================
-WIFI_SSID = "Rayan1"
-WIFI_PASSWORD = "Raralerare12"
 
-MQTT_SERVER = "91.134.134.58"
-client = MQTTClient("esp32_porte_2", MQTT_SERVER, user="esp32", password="181007")
 
-PRTG_IP = "192.168.129.57" 
-PRTG_PORT = "5050"
-PRTG_TOKEN = "secuporte"
-PRTG_URL = "http://" + PRTG_IP + ":" + PRTG_PORT + "/" + PRTG_TOKEN
+
 
 def connecter_wifi():
     wlan = network.WLAN(network.STA_IF)
