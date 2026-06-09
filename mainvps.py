@@ -4,12 +4,6 @@ import time
 import json
 
 # --- CONFIGURATION ---
-SUPABASE_URL = "https://eunmuwnfcfafcxxbezvr.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV1bm11d25mY2ZhZmN4eGJlenZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNTUwNzUsImV4cCI6MjA5MTczMTA3NX0.7K_IEw7XWf3sEHgwiD8nJTl8g6d2rvkRLLWOXsAf3jk"
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-MQTT_BROKER = "91.134.134.58"
-MQTT_USER, MQTT_PASS = "esp32", "181007"
 
 # --- TABLE DE CORRESPONDANCE LOCALE (Évite de planter sur une table SQL inexistante) ---
 MAPPING_PORTES = {
